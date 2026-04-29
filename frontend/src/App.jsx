@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Chat from './pages/Chat';
+import Room from './pages/Room';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -40,6 +41,14 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute>
           <Chat />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/room/:roomId"
+      element={
+        <ProtectedRoute>
+          <Room />
         </ProtectedRoute>
       }
     />

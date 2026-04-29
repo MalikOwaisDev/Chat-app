@@ -1,0 +1,254 @@
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import io from 'socket.io-client';
+import { useAuth } from '../context/AuthContext';
+
+const Room = () => {
+  const { roomId } = useParams();
+  const { user, token } = useAuth();
+  const navigate = useNavigate();
+
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [socket, setSocket] = useState(null);
+  const [roomData, setRoomData] = useState(null);
+  
+  const messagesEndRef = useRef(null);
+
+  // Scroll to bottom whenever messages update
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Fetch initial room data and messages
+  useEffect(() => {
+    const fetchRoomData = async () => {
+      try {
+        const [roomRes, msgsRes] = await Promise.all([
+          axios.get(`http://localhost:5000/api/rooms`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`http://localhost:5000/api/messages/${roomId}`, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        
+        const currentRoom = roomRes.data.find(r => r._id === roomId);
+        if (!currentRoom) {
+          navigate('/chat');
+          return;
+        }
+        
+        setRoomData(currentRoom);
+        setMessages(msgsRes.data);
+      } catch (error) {
+        console.error('Error fetching room/messages:', error);
+        navigate('/chat');
+      }
+    };
+
+    fetchRoomData();
+  }, [roomId, token, navigate]);
+
+  // Socket connection setup
+  useEffect(() => {
+    const newSocket = io('http://localhost:5000', {
+      withCredentials: true,
+    });
+    setSocket(newSocket);
+
+    newSocket.emit('joinRoom', { roomId });
+
+    newSocket.on('newMessage', (message) => {
+      setMessages((prev) => [...prev, message]);
+    });
+
+    return () => {
+      newSocket.emit('leaveRoom', { roomId });
+      newSocket.disconnect();
+    };
+  }, [roomId]);
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !socket) return;
+
+    // Emit message to server via socket
+    socket.emit('sendMessage', {
+      roomId,
+      senderId: user.id,
+      text: newMessage.trim(),
+    });
+
+    setNewMessage('');
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%)',
+        color: '#e2e8f0',
+        fontFamily: "'Inter', sans-serif",
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header */}
+      <header
+        style={{
+          background: 'rgba(255,255,255,0.05)',
+          backdropFilter: 'blur(10px)',
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
+          padding: '1rem 2rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button
+            onClick={() => navigate('/chat')}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff',
+              borderRadius: '8px',
+              padding: '0.5rem 1rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'background 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+            onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <span>←</span> Back to Rooms
+          </button>
+          <h1 style={{ fontSize: '1.2rem', fontWeight: 600, margin: 0, color: '#fff' }}>
+            {roomData ? roomData.name : 'Loading Room...'}
+          </h1>
+        </div>
+        <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+          Logged in as <strong style={{ color: '#a855f7' }}>{user?.username}</strong>
+        </div>
+      </header>
+
+      {/* Chat Area */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          maxWidth: '1000px',
+          width: '100%',
+          margin: '0 auto',
+          padding: '2rem',
+          overflow: 'hidden', // to keep scrollbar inside message list
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            background: 'rgba(0,0,0,0.2)',
+            borderRadius: '16px',
+            border: '1px solid rgba(255,255,255,0.05)',
+            padding: '1.5rem',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem',
+            marginBottom: '1.5rem',
+          }}
+        >
+          {messages.length === 0 ? (
+            <p style={{ color: '#64748b', textAlign: 'center', margin: 'auto' }}>
+              No messages yet. Be the first to say hi! 👋
+            </p>
+          ) : (
+            messages.map((msg, index) => {
+              const isMine = msg.sender?._id === user.id || msg.sender === user.id;
+              return (
+                <div
+                  key={msg._id || index}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: isMine ? 'flex-end' : 'flex-start',
+                  }}
+                >
+                  <span style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.2rem', padding: '0 0.5rem' }}>
+                    {msg.sender?.username || 'Unknown'}
+                  </span>
+                  <div
+                    style={{
+                      background: isMine
+                        ? 'linear-gradient(135deg, #7c3aed, #a855f7)'
+                        : 'rgba(255,255,255,0.1)',
+                      color: '#fff',
+                      padding: '0.75rem 1.25rem',
+                      borderRadius: '16px',
+                      borderTopRightRadius: isMine ? '4px' : '16px',
+                      borderTopLeftRadius: !isMine ? '4px' : '16px',
+                      maxWidth: '70%',
+                      wordBreak: 'break-word',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Message Input */}
+        <form
+          onSubmit={handleSendMessage}
+          style={{
+            display: 'flex',
+            gap: '1rem',
+            background: 'rgba(255,255,255,0.05)',
+            padding: '1rem',
+            borderRadius: '16px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
+        >
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type a message..."
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              color: '#fff',
+              fontSize: '1rem',
+              outline: 'none',
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!newMessage.trim()}
+            style={{
+              background: newMessage.trim() ? '#a855f7' : 'rgba(255,255,255,0.1)',
+              color: newMessage.trim() ? '#fff' : '#64748b',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.5rem 1.5rem',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: newMessage.trim() ? 'pointer' : 'not-allowed',
+              transition: 'background 0.2s',
+            }}
+          >
+            Send
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default Room;
