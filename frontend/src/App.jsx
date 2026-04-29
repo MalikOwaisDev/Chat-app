@@ -4,6 +4,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Chat from './pages/Chat';
 import Room from './pages/Room';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -33,6 +35,22 @@ const AppRoutes = () => (
       element={
         <PublicRoute>
           <Register />
+        </PublicRoute>
+      }
+    />
+    <Route
+      path="/forgot-password"
+      element={
+        <PublicRoute>
+          <ForgotPassword />
+        </PublicRoute>
+      }
+    />
+    <Route
+      path="/reset-password/:token"
+      element={
+        <PublicRoute>
+          <ResetPassword />
         </PublicRoute>
       }
     />

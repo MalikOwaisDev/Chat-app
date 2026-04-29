@@ -105,6 +105,8 @@ const Login = () => {
         </form>
 
         <p className="auth-switch">
+          <Link to="/forgot-password" style={{ color: '#94a3b8', fontSize: '0.9rem', textDecoration: 'none', marginBottom: '0.5rem', display: 'inline-block' }}>Forgot Password?</Link>
+          <br />
           Don&apos;t have an account?{' '}
           <Link to="/register" className="auth-link">Register</Link>
         </p>

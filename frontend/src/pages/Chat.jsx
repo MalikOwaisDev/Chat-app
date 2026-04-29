@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import io from 'socket.io-client';
 
 const Chat = () => {
   const { user, token, logout } = useAuth();
@@ -9,11 +10,38 @@ const Chat = () => {
   const [newRoomName, setNewRoomName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [globalOnlineUsers, setGlobalOnlineUsers] = useState([]);
+  const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchRooms();
   }, [token]);
+
+  // Setup global socket for presence and notifications
+  useEffect(() => {
+    if (!user) return;
+    
+    const socket = io('http://localhost:5000', {
+      withCredentials: true,
+    });
+
+    socket.emit('globalJoin', { username: user.username, userId: user.id });
+
+    socket.on('globalUsersUpdate', (users) => {
+      setGlobalOnlineUsers(users);
+    });
+
+    socket.on('newNotification', (data) => {
+      setNotification(data);
+      // Auto-hide notification after 5 seconds
+      setTimeout(() => setNotification(null), 5000);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
 
   const fetchRooms = async () => {
     try {
@@ -61,8 +89,49 @@ const Chat = () => {
         color: '#e2e8f0',
         fontFamily: "'Inter', sans-serif",
         padding: '2rem',
+        position: 'relative',
       }}
     >
+      {/* Toast Notification */}
+      {notification && (
+        <div
+          onClick={() => navigate(`/room/${notification.roomId}`)}
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: 'rgba(168, 85, 247, 0.9)',
+            backdropFilter: 'blur(10px)',
+            color: '#fff',
+            padding: '1rem',
+            borderRadius: '12px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+            cursor: 'pointer',
+            zIndex: 1000,
+            maxWidth: '300px',
+            border: '1px solid rgba(255,255,255,0.2)',
+            transition: 'all 0.3s ease-in-out',
+            animation: 'slideIn 0.3s ease-out forwards',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <strong style={{ fontSize: '0.9rem' }}>New in {notification.roomName}</strong>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setNotification(null);
+              }}
+              style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+          </div>
+          <div style={{ fontSize: '0.85rem' }}>
+            <span style={{ color: '#e2e8f0', fontWeight: 'bold' }}>{notification.senderName}:</span> {notification.text.length > 30 ? notification.text.substring(0, 30) + '...' : notification.text}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           maxWidth: '800px',
@@ -113,6 +182,42 @@ const Chat = () => {
             Logout
           </button>
         </header>
+
+        {/* Global Online Status Section */}
+        <div
+          style={{
+            background: 'rgba(16, 185, 129, 0.05)',
+            borderRadius: '16px',
+            padding: '1.5rem',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            marginBottom: '2rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem'
+          }}
+        >
+          <h2 style={{ fontSize: '1.1rem', margin: 0, fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ height: '10px', width: '10px', background: '#10b981', borderRadius: '50%', display: 'inline-block' }}></span>
+            Users Online Now ({globalOnlineUsers.length})
+          </h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+            {globalOnlineUsers.length === 0 ? (
+              <span style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No users online</span>
+            ) : (
+              globalOnlineUsers.map((u, i) => (
+                <span key={i} style={{ 
+                  background: 'rgba(16, 185, 129, 0.1)', 
+                  color: '#34d399', 
+                  padding: '0.25rem 0.75rem', 
+                  borderRadius: '20px', 
+                  fontSize: '0.85rem' 
+                }}>
+                  {u}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
 
         <div
           style={{
